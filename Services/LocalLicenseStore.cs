@@ -29,7 +29,7 @@ public sealed class LocalLicenseStore
         if (!File.Exists(file)) return null;
         try
         {
-            var bytes = await File.ReadAllBytesAsync(file).ConfigureAwait(false);
+            byte[] bytes;\n            using (var fs = new FileStream(file, FileMode.Open, FileAccess.Read, FileShare.Read, 4096, true))\n            using (var ms = new MemoryStream())\n            {\n                await fs.CopyToAsync(ms).ConfigureAwait(false);\n                bytes = ms.ToArray();\n            }
             var json = Encoding.UTF8.GetString(ProtectedData.Unprotect(bytes, null, DataProtectionScope.CurrentUser));
             return new JavaScriptSerializer().Deserialize<LicenseInfo>(json);
         }
