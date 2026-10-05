@@ -49,7 +49,7 @@ public partial class MainWindow : Window
         catch (Exception ex) { AppLogger.Error(ex.ToString()); StatusText.Text = "License state could not be restored."; }
     }
 
-    void ShowPage(System.Windows.Controls.UIElement page)
+    void ShowPage(System.Windows.UIElement page)
     {
         DashboardPanel.Visibility = Visibility.Collapsed;
         DiscordPanel.Visibility = Visibility.Collapsed;
