@@ -31,7 +31,13 @@ Name: "desktopicon"; Description: "Create a desktop shortcut"
 function IsDotNet48Installed(): Boolean;
 var Release: Cardinal;
 begin
-  Result := RegQueryDWordValue(HKLM, 'SOFTWARE\Microsoft\NET Framework Setup\NDP\v4\Full', 'Release', Release) and (Release >= 528040);
+  Result := False;
+  if IsWin64 then
+    Result := RegQueryDWordValue(HKLM64, 'SOFTWARE\Microsoft\NET Framework Setup\NDP\v4\Full', 'Release', Release) and (Release >= 528040);
+  if not Result then
+    Result := RegQueryDWordValue(HKLM32, 'SOFTWARE\Microsoft\NET Framework Setup\NDP\v4\Full', 'Release', Release) and (Release >= 528040);
+  if not Result then
+    Result := RegQueryDWordValue(HKLM, 'SOFTWARE\Microsoft\NET Framework Setup\NDP\v4\Full', 'Release', Release) and (Release >= 528040);
 end;
 
 function InitializeSetup(): Boolean;
