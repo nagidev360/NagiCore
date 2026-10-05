@@ -1,11 +1,43 @@
+using System;
+using System.IO;
 using System.Security.Cryptography;
 using System.Text;
-using System.Text.Json;
+using System.Threading.Tasks;
+using System.Web.Script.Serialization;
 using NagiCore.Models;
+
 namespace NagiCore.Services;
-public sealed class LocalLicenseStore{
- readonly string file=Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),"NagiCore","license.dat");
- public async Task SaveAsync(LicenseInfo info){Directory.CreateDirectory(Path.GetDirectoryName(file)!);var json=JsonSerializer.Serialize(info);var bytes=ProtectedData.Protect(Encoding.UTF8.GetBytes(json),null,DataProtectionScope.CurrentUser);await File.WriteAllBytesAsync(file,bytes);}
- public async Task<LicenseInfo?> LoadAsync(){if(!File.Exists(file))return null;try{var bytes=await File.ReadAllBytesAsync(file);var json=Encoding.UTF8.GetString(ProtectedData.Unprotect(bytes,null,DataProtectionScope.CurrentUser));return JsonSerializer.Deserialize<LicenseInfo>(json);}catch{return null;}}
- public void Clear(){if(File.Exists(file))File.Delete(file);}
+
+public sealed class LocalLicenseStore
+{
+    readonly string file = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), "NagiCore", "license.dat");
+
+    public async Task SaveAsync(LicenseInfo info)
+    {
+        Directory.CreateDirectory(Path.GetDirectoryName(file));
+        var json = new JavaScriptSerializer().Serialize(info);
+        var bytes = ProtectedData.Protect(Encoding.UTF8.GetBytes(json), null, DataProtectionScope.CurrentUser);
+        var temp = file + ".tmp";
+        using (var fs = new FileStream(temp, FileMode.Create, FileAccess.Write, FileShare.None, 4096, true))
+            await fs.WriteAsync(bytes, 0, bytes.Length).ConfigureAwait(false);
+        if (File.Exists(file)) File.Replace(temp, file, null);
+        else File.Move(temp, file);
+    }
+
+    public async Task<LicenseInfo> LoadAsync()
+    {
+        if (!File.Exists(file)) return null;
+        try
+        {
+            var bytes = await File.ReadAllBytesAsync(file).ConfigureAwait(false);
+            var json = Encoding.UTF8.GetString(ProtectedData.Unprotect(bytes, null, DataProtectionScope.CurrentUser));
+            return new JavaScriptSerializer().Deserialize<LicenseInfo>(json);
+        }
+        catch { return null; }
+    }
+
+    public void Clear()
+    {
+        try { if (File.Exists(file)) File.Delete(file); } catch { }
+    }
 }
