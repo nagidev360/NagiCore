@@ -68,11 +68,8 @@ if not defined ISCC_EXE (
 echo.
 echo [2/4] Configuring current machine PATH...
 
-call :add_to_path "%~dp0"
-
-for %%D in ("%MSBUILD_EXE%" "%ISCC_EXE%") do (
-    for %%P in (%%~dpD) do call :add_to_path "%%~P"
-)
+for %%P in ("%MSBUILD_EXE%") do call :add_to_path "%%~dpP"
+for %%P in ("%ISCC_EXE%") do call :add_to_path "%%~dpP"
 
 rem Refresh this process PATH from the machine PATH.
 for /f "tokens=2,*" %%A in ('reg query "HKLM\SYSTEM\CurrentControlSet\Control\Session Manager\Environment" /v Path 2^>nul') do if /i "%%A"=="Path" set "PATH=%%B;%PATH%"
@@ -82,6 +79,13 @@ echo MSBuild:
 echo   %MSBUILD_EXE%
 echo ISCC:
 echo   %ISCC_EXE%
+
+echo.
+echo Verifying command-line availability...
+where msbuild.exe >nul 2>&1
+if errorlevel 1 echo WARNING: msbuild is not yet visible to this process. The installed path will be available in a new terminal.
+where iscc.exe >nul 2>&1
+if errorlevel 1 echo WARNING: iscc is not yet visible to this process. The installed path will be available in a new terminal.
 
 echo.
 echo [3/4] Restoring and building NagiCore...
