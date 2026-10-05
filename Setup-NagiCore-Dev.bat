@@ -191,34 +191,51 @@ exit /b 0
 :download_file
 set "DOWNLOAD_URL=%~1"
 set "DOWNLOAD_FILE=%~2"
+set "CURL_EXE="
 if exist "%DOWNLOAD_FILE%" del /q "%DOWNLOAD_FILE%" >nul 2>&1
 
-rem Prefer curl.exe when available. It handles modern HTTPS without old PowerShell TLS enums.
+rem 1) Prefer native curl. No PowerShell TLS enum is used.
 for /f "delims=" %%P in ('where curl.exe 2^>nul') do if not defined CURL_EXE set "CURL_EXE=%%P"
 if defined CURL_EXE (
     echo Downloading with curl...
     "%CURL_EXE%" -L --fail --retry 3 --connect-timeout 20 --output "%DOWNLOAD_FILE%" "%DOWNLOAD_URL%"
-    if not errorlevel 1 if exist "%DOWNLOAD_FILE%" exit /b 0
+    if not errorlevel 1 call :validate_download && exit /b 0
+    if exist "%DOWNLOAD_FILE%" del /q "%DOWNLOAD_FILE%" >nul 2>&1
 )
 
-rem certutil is available on supported Windows versions and avoids the old PowerShell TLS12 enum failure.
-echo Downloading with Windows certutil fallback...
+rem 2) Windows certutil uses the OS networking stack and works on older PowerShell.
+echo Downloading with Windows certutil...
 certutil -urlcache -split -f "%DOWNLOAD_URL%" "%DOWNLOAD_FILE%" >nul 2>&1
-if not errorlevel 1 if exist "%DOWNLOAD_FILE%" (
-    for %%F in ("%DOWNLOAD_FILE%") do if %%~zF GTR 100000 exit /b 0
-)
+if not errorlevel 1 call :validate_download && exit /b 0
+if exist "%DOWNLOAD_FILE%" del /q "%DOWNLOAD_FILE%" >nul 2>&1
 
-rem BITS is another Windows-native HTTPS fallback.
+rem 3) BITS fallback for older Windows installations.
 where bitsadmin.exe >nul 2>&1
 if not errorlevel 1 (
-    echo Downloading with BITS fallback...
+    echo Downloading with BITS...
     bitsadmin /transfer NagiCoreSetupDownload /priority normal "%DOWNLOAD_URL%" "%DOWNLOAD_FILE%" >nul 2>&1
-    if not errorlevel 1 if exist "%DOWNLOAD_FILE%" (
-        for %%F in ("%DOWNLOAD_FILE%") do if %%~zF GTR 100000 exit /b 0
-    )
+    if not errorlevel 1 call :validate_download && exit /b 0
+    if exist "%DOWNLOAD_FILE%" del /q "%DOWNLOAD_FILE%" >nul 2>&1
 )
 
-echo ERROR: All automatic download methods failed.
+rem 4) Last resort: open the official URL in the browser for manual download.
+echo.
+echo Automatic HTTPS download failed on this Windows installation.
+echo Opening the official download URL in your browser...
+start "" "%DOWNLOAD_URL%"
+echo.
+echo Save the downloaded file as:
+echo   %DOWNLOAD_FILE%
+echo Then press any key to continue.
+pause >nul
+if exist "%DOWNLOAD_FILE%" call :validate_download && exit /b 0
+
+echo ERROR: Download could not be completed automatically.
+exit /b 1
+
+:validate_download
+if not exist "%DOWNLOAD_FILE%" exit /b 1
+for %%F in ("%DOWNLOAD_FILE%") do if %%~zF GTR 100000 exit /b 0
 exit /b 1
 
 :add_to_path
