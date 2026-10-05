@@ -26,8 +26,9 @@ jobs:
         run: |
           $dir = Join-Path $env:RUNNER_TEMP "NagiCoreInstall"
           if (Test-Path $dir) { Remove-Item $dir -Recurse -Force }
-          & .\dist\NagiCore-Setup.exe /VERYSILENT /SUPPRESSMSGBOXES /NORESTART /DIR="$dir"
-          if ($LASTEXITCODE -ne 0 -or !(Test-Path (Join-Path $dir "NagiCore.exe"))) { throw "Fresh install failed." }
+          $log = Join-Path $env:RUNNER_TEMP "NagiCore-setup.log"
+          & .\dist\NagiCore-Setup.exe /VERYSILENT /SUPPRESSMSGBOXES /NORESTART /LOG="$log" /DIR="$dir"
+          if ($LASTEXITCODE -ne 0 -or !(Test-Path (Join-Path $dir "NagiCore.exe"))) { if (Test-Path $log) { Get-Content $log }; Get-ChildItem $dir -Recurse -ErrorAction SilentlyContinue | Format-List FullName; throw "Fresh install failed." }
           & .\dist\NagiCore-Setup.exe /VERYSILENT /SUPPRESSMSGBOXES /NORESTART /DIR="$dir"
           if ($LASTEXITCODE -ne 0 -or !(Test-Path (Join-Path $dir "NagiCore.exe"))) { throw "Upgrade/reinstall failed." }
           $uninstaller = Join-Path $dir "unins000.exe"
