@@ -8,7 +8,7 @@ AppId={{B8A0E0D2-7B7D-4A7E-9C4A-7D2E1B9A1C10}
 AppName={#AppName}
 AppVersion={#AppVersion}
 AppPublisher={#AppPublisher}
-DefaultDirName={autopf}\NagiCore
+DefaultDirName={localappdata}\Programs\NagiCore
 DefaultGroupName={#AppName}
 OutputDir=..\dist
 OutputBaseFilename=NagiCore-Setup
@@ -17,7 +17,7 @@ SolidCompression=yes
 PrivilegesRequired=lowest
 WizardStyle=modern
 Uninstallable=yes
-ArchitecturesAllowed=x86 x64
+ArchitecturesAllowed=x86 x64compatible
 [Files]
 Source: "..\bin\Release\NagiCore.exe"; DestDir: "{app}"; Flags: ignoreversion
 Source: "..\bin\Release\*.dll"; DestDir: "{app}"; Flags: ignoreversion
@@ -31,9 +31,7 @@ Name: "desktopicon"; Description: "Create a desktop shortcut"
 function IsDotNet48Installed(): Boolean;
 var Release: Cardinal;
 begin
-  Result := RegQueryDWordValue(HKLM64, 'SOFTWARE\Microsoft\NET Framework Setup\NDP\v4\Full', 'Release', Release) and (Release >= 528040);
-  if not Result then
-    Result := RegQueryDWordValue(HKLM, 'SOFTWARE\Microsoft\NET Framework Setup\NDP\v4\Full', 'Release', Release) and (Release >= 528040);
+  Result := RegQueryDWordValue(HKLM, 'SOFTWARE\Microsoft\NET Framework Setup\NDP\v4\Full', 'Release', Release) and (Release >= 528040);
 end;
 
 function InitializeSetup(): Boolean;
