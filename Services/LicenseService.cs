@@ -1,18 +1,81 @@
+using System;
+using System.Net;
 using System.Net.Http;
-using System.Net.Http.Json;
 using System.Security.Cryptography;
-using System.Text.Json;
+using System.Text;
+using System.Threading.Tasks;
+using System.Web.Script.Serialization;
+
 namespace NagiCore.Services;
-public sealed record LicenseResult(bool Valid,string Reason,string? Product,string? ClientId,DateTimeOffset? IssuedAt,DateTimeOffset? ExpiresAt);
-public sealed class LicenseService {
- private const string VerifyUrl="https://nagi-key-4sli.onrender.com/api/key/verify";
- private static readonly HttpClient Http=new(){Timeout=TimeSpan.FromSeconds(12)};
- public static string GetDeviceId(){var raw=Environment.MachineName+"|"+Environment.UserName+"|"+Environment.OSVersion.VersionString;var hash=SHA256.HashData(System.Text.Encoding.UTF8.GetBytes(raw));return Convert.ToHexString(hash)[..32];}
- public async Task<LicenseResult> VerifyAsync(string key){
-  try{using var response=await Http.PostAsJsonAsync(VerifyUrl,new{key});var json=await response.Content.ReadFromJsonAsync<JsonElement>();var valid=json.TryGetProperty("valid",out var v)&&v.GetBoolean();var reason=json.TryGetProperty("reason",out var r)?r.GetString()??"UNKNOWN":"UNKNOWN";if(!valid)return new(false,reason,null,null,null,null);
-   DateTimeOffset? issued=json.TryGetProperty("issuedAt",out var i)&&DateTimeOffset.TryParse(i.GetString(),out var iv)?iv:null;
-   DateTimeOffset? expires=json.TryGetProperty("expiresAt",out var e)&&DateTimeOffset.TryParse(e.GetString(),out var ev)?ev:null;
-   var product=json.TryGetProperty("product",out var p)?p.GetString():null;var client=json.TryGetProperty("clientId",out var c)?c.GetString():null;return new(true,reason,product,client,issued,expires);}
-  catch(Exception ex){return new(false,"NETWORK_ERROR: "+ex.Message,null,null,null,null);}
- }
+
+public sealed class LicenseResult
+{
+    public bool Valid { get; set; }
+    public string Reason { get; set; } = "UNKNOWN";
+    public string Product { get; set; }
+    public string ClientId { get; set; }
+    public DateTimeOffset? IssuedAt { get; set; }
+    public DateTimeOffset? ExpiresAt { get; set; }
+}
+
+public sealed class LicenseService
+{
+    private const string VerifyUrl = "https://nagi-key-4sli.onrender.com/api/key/verify";
+    private static readonly HttpClient Http = CreateClient();
+
+    private static HttpClient CreateClient()
+    {
+        ServicePointManager.SecurityProtocol = SecurityProtocolType.Tls12;
+        var c = new HttpClient();
+        c.Timeout = TimeSpan.FromSeconds(12);
+        c.DefaultRequestHeaders.UserAgent.ParseAdd("NagiCore/1.0");
+        return c;
+    }
+
+    public static string GetDeviceId()
+    {
+        var raw = Environment.MachineName + "|" + Environment.UserName + "|" + Environment.OSVersion.VersionString;
+        using (var sha = SHA256.Create())
+        {
+            var hash = sha.ComputeHash(Encoding.UTF8.GetBytes(raw));
+            var sb = new StringBuilder();
+            foreach (var b in hash) sb.Append(b.ToString("X2"));
+            return sb.ToString().Substring(0, 32);
+        }
+    }
+
+    public async Task<LicenseResult> VerifyAsync(string key)
+    {
+        try
+        {
+            var payload = new JavaScriptSerializer().Serialize(new { key = key });
+            using (var content = new StringContent(payload, Encoding.UTF8, "application/json"))
+            using (var response = await Http.PostAsync(VerifyUrl, content).ConfigureAwait(true))
+            {
+                var json = await response.Content.ReadAsStringAsync().ConfigureAwait(true);
+                if (!response.IsSuccessStatusCode)
+                    return new LicenseResult { Valid = false, Reason = "HTTP_" + (int)response.StatusCode };
+
+                var data = new JavaScriptSerializer().DeserializeObject(json) as System.Collections.Generic.Dictionary<string, object>;
+                if (data == null) return new LicenseResult { Valid = false, Reason = "INVALID_RESPONSE" };
+
+                bool valid = data.ContainsKey("valid") && data["valid"] is bool && (bool)data["valid"];
+                var result = new LicenseResult { Valid = valid, Reason = GetString(data, "reason") ?? "UNKNOWN", Product = GetString(data, "product"), ClientId = GetString(data, "clientId") };
+                DateTimeOffset parsed;
+                if (DateTimeOffset.TryParse(GetString(data, "issuedAt"), out parsed)) result.IssuedAt = parsed;
+                if (DateTimeOffset.TryParse(GetString(data, "expiresAt"), out parsed)) result.ExpiresAt = parsed;
+                return result;
+            }
+        }
+        catch (Exception ex)
+        {
+            return new LicenseResult { Valid = false, Reason = "NETWORK_ERROR: " + ex.Message };
+        }
+    }
+
+    private static string GetString(System.Collections.Generic.Dictionary<string, object> data, string key)
+    {
+        object value;
+        return data.TryGetValue(key, out value) ? value as string : null;
+    }
 }
