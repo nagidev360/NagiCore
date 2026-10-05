@@ -12,7 +12,10 @@ jobs:
       - uses: microsoft/setup-msbuild@v2
       - name: Build
         run: msbuild NagiCore.csproj /restore /p:Configuration=Release /m
-      - name: Smoke tests\n        shell: powershell\n        run: powershell -NoProfile -ExecutionPolicy Bypass -File tests\\SmokeTests.ps1\n      - name: Install Inno Setup
+      - name: Smoke tests
+        shell: powershell
+        run: powershell -NoProfile -ExecutionPolicy Bypass -File tests\SmokeTests.ps1
+      - name: Install Inno Setup
         shell: powershell
         run: choco install innosetup -y --no-progress
       - name: Installer
