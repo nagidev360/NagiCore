@@ -6,4 +6,4 @@
     <SolidColorBrush x:Key="Muted" Color="#8F9BB3"/>
     <SolidColorBrush x:Key="Accent" Color="#7C5CFC"/>
   </Application.Resources>
-</Application.Resources>
+</Application>
