@@ -21,6 +21,19 @@ jobs:
       - name: Installer
         shell: powershell
         run: iscc installer\NagiCoreInstaller.iss
+      - name: Installer smoke test
+        shell: powershell
+        run: |
+          $dir = Join-Path $env:RUNNER_TEMP "NagiCoreInstall"
+          if (Test-Path $dir) { Remove-Item $dir -Recurse -Force }
+          & .\dist\NagiCore-Setup.exe /VERYSILENT /SUPPRESSMSGBOXES /NORESTART /DIR="$dir"
+          if ($LASTEXITCODE -ne 0 -or !(Test-Path (Join-Path $dir "NagiCore.exe"))) { throw "Fresh install failed." }
+          & .\dist\NagiCore-Setup.exe /VERYSILENT /SUPPRESSMSGBOXES /NORESTART /DIR="$dir"
+          if ($LASTEXITCODE -ne 0 -or !(Test-Path (Join-Path $dir "NagiCore.exe"))) { throw "Upgrade/reinstall failed." }
+          $uninstaller = Join-Path $dir "unins000.exe"
+          if (!(Test-Path $uninstaller)) { throw "Uninstaller was not created." }
+          & $uninstaller /VERYSILENT /SUPPRESSMSGBOXES /NORESTART
+          if ($LASTEXITCODE -ne 0) { throw "Uninstall failed." }
       - uses: actions/upload-artifact@v4
         with:
           name: NagiCore-release
