@@ -1,16 +1,41 @@
 # NagiCore
 All-in-One Windows Utility Suite
 
+## Modules
+- Barcode — barcode/QR generation and image scanning, PNG/PDF export and printing.
+- Billing — persistent invoices, accurate decimal calculations, tax/discount, history and CSV/PDF export.
+- Diamond — persistent inventory records, CRUD, search/filter and CSV import/export. Market valuation is not invented.
+- Discord — secure bot credential storage using Windows DPAPI and Discord API verification.
+- Windows — compatibility, CPU/RAM/storage/runtime detection and safe startup configuration.
+
+## Technology
+C# / WPF / .NET Framework 4.8.
+
+## Compatibility
+- Windows 7 SP1: supported baseline when .NET Framework 4.8 is installed.
+- Windows 8.0: explicitly unsupported by the selected .NET Framework 4.8 baseline.
+- Windows 8.1, Windows 10 and Windows 11: supported baseline.
+Actual feature availability is checked at runtime.
+
 ## Build
-Install .NET 8 SDK on Windows, then run:
-dotnet restore
-dotnet build -c Release
+On Windows with Visual Studio/MSBuild:
+```powershell
+msbuild NagiCore.csproj /restore /p:Configuration=Release /m
+```
 
-Publish:
-dotnet publish -c Release -r win-x64 --self-contained true /p:PublishSingleFile=true /p:IncludeNativeLibrariesForSelfExtract=true
+Build output: `bin\\Release\\NagiCore.exe`
 
-The executable will be under bin/Release/net8.0-windows/win-x64/publish/NagiCore.exe.
+## Installer
+Install Inno Setup, build Release, then:
+```powershell
+iscc installer\\NagiCoreInstaller.iss
+```
+Installer output: `dist\\NagiCore-Setup.exe`
+
+The installer checks for .NET Framework 4.8 and bundles application DLL dependencies.
+
+## Data
+Application data is stored under `%LOCALAPPDATA%\\NagiCore`, with module data under `data`. Writes use temporary files and backups where applicable.
 
 ## License
-The client verifies licenses through the existing NAGI.KEY service. License secrets are not embedded in the client.
-Strong server-side one-device binding should be added to NAGI.KEY before commercial release.
+The client verifies licenses through the existing NAGI.KEY service. License secrets are not embedded in the client. Commercial release still requires server-side one-device binding/revocation enforcement in NAGI.KEY.
