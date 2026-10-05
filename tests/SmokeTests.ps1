@@ -9,7 +9,7 @@ $nagiAssembly = [Reflection.Assembly]::LoadFrom($exe)
 
 $barcodeType = $nagiAssembly.GetType("NagiCore.Modules.Barcode.BarcodeModule")
 $barcode = $barcodeType.GetConstructor([Type[]]@()).Invoke($null)
-$zxingAssembly = [Reflection.Assembly]::LoadFrom(($dlls | Where-Object { $_.Name -match "^zxing\\.dll$" } | Select-Object -First 1).FullName)
+$zxingAssembly = [Reflection.Assembly]::LoadFrom(($dlls | Where-Object { $_.Name -ieq "zxing.dll" } | Select-Object -First 1).FullName)
 $formatType = $zxingAssembly.GetType("ZXing.BarcodeFormat")
 $qr = [Enum]::Parse($formatType, "QR_CODE")
 $image = $barcode.Generate("NagiCore-Smoke-Test", $qr, 320, 320)
