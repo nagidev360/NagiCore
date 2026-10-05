@@ -16,6 +16,7 @@ using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Documents;
 using System.Windows.Media.Imaging;
+using System.Windows.Media;
 
 namespace NagiCore;
 
@@ -42,6 +43,7 @@ public partial class MainWindow : Window
   DarkModeBox.IsChecked=currentSettings.DarkMode;
   NotificationsBox.IsChecked=currentSettings.Notifications;
   UpdatesBox.IsChecked=currentSettings.CheckUpdates;
+  ApplyTheme(currentSettings.DarkMode);
   Loaded+=async delegate{await RestoreLicenseAsync();ShowPage(DashboardPanel);RefreshDashboard();};
   Closed+=(s,e)=>{if(barcodeBitmap!=null)barcodeBitmap.Dispose();};
  }
@@ -147,8 +149,9 @@ public partial class MainWindow : Window
  async Task DiscordRequest(Func<string,Task<string>> action){var token=credentials.Load("discord-bot-token");if(string.IsNullOrEmpty(token)){DiscordStatus.Text="Connect a bot first.";return;}try{DiscordOutputBox.Text=await action(token);}catch(Exception ex){DiscordStatus.Text=ex.Message;AppLogger.Warning("Discord request failed: "+ex.Message);}}
 
  async void Activate_Click(object s,RoutedEventArgs e){var key=(KeyBox.Text??"").Trim();if(key.Length<10){StatusText.Text="Enter a valid license key.";return;}ActivateButton.IsEnabled=false;StatusText.Text="Verifying license...";var result=await license.VerifyAsync(key);ActivateButton.IsEnabled=true;if(!result.Valid){StatusText.Text="License rejected: "+result.Reason;return;}await store.SaveAsync(new LicenseInfo(key,LicenseService.GetDeviceId(),result.ExpiresAt,result.Product));LicenseDetails.Text="Active license until "+(result.ExpiresAt.HasValue?result.ExpiresAt.Value.ToLocalTime().ToString("dd MMM yyyy, HH:mm"):"unknown");StatusText.Text="License activated successfully.";}
- void SaveSettings_Click(object s,RoutedEventArgs e){currentSettings.DarkMode=DarkModeBox.IsChecked==true;currentSettings.Notifications=NotificationsBox.IsChecked==true;currentSettings.CheckUpdates=UpdatesBox.IsChecked==true;settings.Save(currentSettings);StatusText.Text="Settings saved.";}
- void ResetSettings_Click(object s,RoutedEventArgs e){if(MessageBox.Show("Reset all NagiCore settings?","NagiCore",MessageBoxButton.YesNo,MessageBoxImage.Question)!=MessageBoxResult.Yes)return;settings.Reset();currentSettings=new AppSettings();DarkModeBox.IsChecked=true;NotificationsBox.IsChecked=false;UpdatesBox.IsChecked=true;StatusText.Text="Settings reset.";}
+ void ApplyTheme(bool dark){var values=dark?new[]{"#0B0F19","#121826","#F4F7FB","#8F9BB3"}:new[]{"#F5F7FB","#FFFFFF","#1A1F2B","#667085"};App.Current.Resources["Bg"]=new SolidColorBrush((Color)ColorConverter.ConvertFromString(values[0]));App.Current.Resources["Panel"]=new SolidColorBrush((Color)ColorConverter.ConvertFromString(values[1]));App.Current.Resources["Text"]=new SolidColorBrush((Color)ColorConverter.ConvertFromString(values[2]));App.Current.Resources["Muted"]=new SolidColorBrush((Color)ColorConverter.ConvertFromString(values[3]));}
+ void SaveSettings_Click(object s,RoutedEventArgs e){currentSettings.DarkMode=DarkModeBox.IsChecked==true;ApplyTheme(currentSettings.DarkMode);currentSettings.Notifications=NotificationsBox.IsChecked==true;currentSettings.CheckUpdates=UpdatesBox.IsChecked==true;settings.Save(currentSettings);StatusText.Text="Settings saved.";}
+ void ResetSettings_Click(object s,RoutedEventArgs e){if(MessageBox.Show("Reset all NagiCore settings?","NagiCore",MessageBoxButton.YesNo,MessageBoxImage.Question)!=MessageBoxResult.Yes)return;settings.Reset();currentSettings=new AppSettings();DarkModeBox.IsChecked=true;ApplyTheme(true);NotificationsBox.IsChecked=false;UpdatesBox.IsChecked=true;StatusText.Text="Settings reset.";}
  void ExportSettings_Click(object s,RoutedEventArgs e){var d=new SaveFileDialog{Filter="NagiCore settings|*.json",FileName="NagiCore-settings.json"};if(d.ShowDialog()!=true)return;try{settings.Save(currentSettings);settings.Export(d.FileName);StatusText.Text="Settings exported.";}catch(Exception ex){AppLogger.Error(ex.ToString());MessageBox.Show("Settings export failed.","NagiCore",MessageBoxButton.OK,MessageBoxImage.Error);}}
  void ImportSettings_Click(object s,RoutedEventArgs e){var d=new OpenFileDialog{Filter="NagiCore settings|*.json"};if(d.ShowDialog()!=true)return;try{settings.Import(d.FileName);currentSettings=settings.Load();DarkModeBox.IsChecked=currentSettings.DarkMode;NotificationsBox.IsChecked=currentSettings.Notifications;UpdatesBox.IsChecked=currentSettings.CheckUpdates;StatusText.Text="Settings imported.";}catch(Exception ex){AppLogger.Error(ex.ToString());MessageBox.Show("The selected settings file is invalid.","NagiCore",MessageBoxButton.OK,MessageBoxImage.Error);}}
  void RefreshLogs_Click(object s,RoutedEventArgs e){try{LogBox.Text=File.Exists(AppLogger.LogFile)?File.ReadAllText(AppLogger.LogFile):"No log entries yet.";}catch(Exception ex){LogBox.Text="Unable to read log.";AppLogger.Error(ex.ToString());}}
