@@ -143,13 +143,14 @@ if defined WINGET (
     echo Installing Microsoft Visual Studio Build Tools through winget...
     "%WINGET%" install --id Microsoft.VisualStudio.2022.BuildTools -e --accept-source-agreements --accept-package-agreements --override "--quiet --wait --norestart --add Microsoft.VisualStudio.Workload.ManagedDesktopBuildTools --add Microsoft.Net.Component.4.8.TargetingPack --includeRecommended"
     if not errorlevel 1 exit /b 0
-    echo winget installation failed. Trying Microsoft's official bootstrapper...
+    echo winget installation failed. Trying download fallback...
 )
+
 set "VS_BOOTSTRAPPER=%TEMP%\vs_buildtools.exe"
-echo Downloading Microsoft Visual Studio Build Tools from Microsoft...
-powershell.exe -NoProfile -ExecutionPolicy Bypass -Command "$ProgressPreference='SilentlyContinue'; [Net.ServicePointManager]::SecurityProtocol=[Net.SecurityProtocolType]::Tls12; (New-Object System.Net.WebClient).DownloadFile('https://aka.ms/vs/17/release/vs_buildtools.exe','%VS_BOOTSTRAPPER%')"
+call :download_file "https://aka.ms/vs/17/release/vs_buildtools.exe" "%VS_BOOTSTRAPPER%"
 if errorlevel 1 (
     echo ERROR: Could not download Visual Studio Build Tools.
+    echo Install Microsoft Visual Studio Build Tools manually, then run this script again.
     exit /b 1
 )
 "%VS_BOOTSTRAPPER%" --quiet --wait --norestart --add Microsoft.VisualStudio.Workload.ManagedDesktopBuildTools --add Microsoft.Net.Component.4.8.TargetingPack --includeRecommended
@@ -168,13 +169,14 @@ if defined WINGET (
     echo Installing Inno Setup through winget...
     "%WINGET%" install --id JRSoftware.InnoSetup -e --accept-source-agreements --accept-package-agreements
     if not errorlevel 1 exit /b 0
-    echo winget installation failed. Trying the official Inno Setup installer...
+    echo winget installation failed. Trying download fallback...
 )
+
 set "INNO_INSTALLER=%TEMP%\innosetup.exe"
-echo Downloading Inno Setup from the official publisher...
-powershell.exe -NoProfile -ExecutionPolicy Bypass -Command "$ProgressPreference='SilentlyContinue'; [Net.ServicePointManager]::SecurityProtocol=[Net.SecurityProtocolType]::Tls12; (New-Object System.Net.WebClient).DownloadFile('https://jrsoftware.org/download.php/is.exe','%INNO_INSTALLER%')"
+call :download_file "https://jrsoftware.org/download.php/is.exe" "%INNO_INSTALLER%"
 if errorlevel 1 (
     echo ERROR: Could not download Inno Setup.
+    echo Install Inno Setup manually, then run this script again.
     exit /b 1
 )
 "%INNO_INSTALLER%" /VERYSILENT /SUPPRESSMSGBOXES /NORESTART
@@ -185,6 +187,39 @@ if not "%RC%"=="0" (
     exit /b 1
 )
 exit /b 0
+
+:download_file
+set "DOWNLOAD_URL=%~1"
+set "DOWNLOAD_FILE=%~2"
+if exist "%DOWNLOAD_FILE%" del /q "%DOWNLOAD_FILE%" >nul 2>&1
+
+rem Prefer curl.exe when available. It handles modern HTTPS without old PowerShell TLS enums.
+for /f "delims=" %%P in ('where curl.exe 2^>nul') do if not defined CURL_EXE set "CURL_EXE=%%P"
+if defined CURL_EXE (
+    echo Downloading with curl...
+    "%CURL_EXE%" -L --fail --retry 3 --connect-timeout 20 --output "%DOWNLOAD_FILE%" "%DOWNLOAD_URL%"
+    if not errorlevel 1 if exist "%DOWNLOAD_FILE%" exit /b 0
+)
+
+rem certutil is available on supported Windows versions and avoids the old PowerShell TLS12 enum failure.
+echo Downloading with Windows certutil fallback...
+certutil -urlcache -split -f "%DOWNLOAD_URL%" "%DOWNLOAD_FILE%" >nul 2>&1
+if not errorlevel 1 if exist "%DOWNLOAD_FILE%" (
+    for %%F in ("%DOWNLOAD_FILE%") do if %%~zF GTR 100000 exit /b 0
+)
+
+rem BITS is another Windows-native HTTPS fallback.
+where bitsadmin.exe >nul 2>&1
+if not errorlevel 1 (
+    echo Downloading with BITS fallback...
+    bitsadmin /transfer NagiCoreSetupDownload /priority normal "%DOWNLOAD_URL%" "%DOWNLOAD_FILE%" >nul 2>&1
+    if not errorlevel 1 if exist "%DOWNLOAD_FILE%" (
+        for %%F in ("%DOWNLOAD_FILE%") do if %%~zF GTR 100000 exit /b 0
+    )
+)
+
+echo ERROR: All automatic download methods failed.
+exit /b 1
 
 :add_to_path
 set "ADD_PATH=%~1"
