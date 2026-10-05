@@ -3,12 +3,12 @@ using System.IO;
 namespace NagiCore.Services;
 public sealed class CompatibilityReport
 {
-    public Version WindowsVersion { get; init; } = Environment.OSVersion.Version;
-    public bool Is64Bit { get; init; } = Environment.Is64BitOperatingSystem;
-    public long FreeDiskBytes { get; init; }
-    public bool IsSupported { get; init; }
-    public string Status { get; init; } = "UNKNOWN";
-    public string Details { get; init; } = "";
+    public Version WindowsVersion { get; set; } = Environment.OSVersion.Version;
+    public bool Is64Bit { get; set; } = Environment.Is64BitOperatingSystem;
+    public long FreeDiskBytes { get; set; }
+    public bool IsSupported { get; set; }
+    public string Status { get; set; } = "UNKNOWN";
+    public string Details { get; set; } = "";
 }
 public static class CompatibilityService
 {
