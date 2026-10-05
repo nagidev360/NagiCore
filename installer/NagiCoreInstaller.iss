@@ -42,9 +42,13 @@ end;
 
 function InitializeSetup(): Boolean;
 begin
-  Result := IsDotNet48Installed();
-  if not Result then
-    MsgBox('NagiCore requires Microsoft .NET Framework 4.8. Install it first, then run this installer again.', mbCriticalError, MB_OK);
+  Result := True;
+  if not IsDotNet48Installed then
+  begin
+    Log('.NET Framework 4.8 was not detected by installer preflight.');
+    if not WizardSilent then
+      MsgBox('NagiCore requires Microsoft .NET Framework 4.8 or later. The installer will continue, but NagiCore will report the runtime requirement at startup.', mbInformation, MB_OK);
+  end;
 end;
 
 [Run]
