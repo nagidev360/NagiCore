@@ -4,7 +4,7 @@ using System.Net;
 using System.Net.Http;
 using System.Net.Http.Headers;
 using System.Security;
-using System.Text.Json;
+using System.Web.Script.Serialization;
 using System.Threading.Tasks;
 
 namespace NagiCore.Services;
@@ -30,11 +30,9 @@ public sealed class DiscordService
             {
                 var body = await response.Content.ReadAsStringAsync().ConfigureAwait(true);
                 if (!response.IsSuccessStatusCode) throw new InvalidOperationException("Discord rejected the bot token (HTTP " + (int)response.StatusCode + ").");
-                using (var doc = JsonDocument.Parse(body))
-                {
-                    var root = doc.RootElement;
-                    return new DiscordConnection(root.GetProperty("id").GetString(), root.GetProperty("username").GetString(), root.TryGetProperty("discriminator", out var d) ? d.GetString() : "0");
-                }
+                var data = new JavaScriptSerializer().DeserializeObject(body) as Dictionary<string, object>;
+                if (data == null || !data.ContainsKey("id") || !data.ContainsKey("username")) throw new InvalidOperationException("Discord returned an invalid identity response.");
+                return new DiscordConnection(data["id"] as string, data["username"] as string, data.ContainsKey("discriminator") ? data["discriminator"] as string : "0");
             }
         }
     }
