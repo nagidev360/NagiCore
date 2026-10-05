@@ -1,25 +1,31 @@
+using Microsoft.Win32;
+using System;
+using System.IO;
+using System.Threading.Tasks;
 using System.Windows;
 using NagiCore.Models;
 using NagiCore.Services;
 namespace NagiCore;
-public partial class MainWindow:Window{
- readonly LicenseService license=new();
- readonly LocalLicenseStore store=new();
- public MainWindow(){InitializeComponent();Loaded+=async(_,_)=>await RestoreLicenseAsync();}
- async Task RestoreLicenseAsync(){
-  try{var state=await store.LoadAsync();if(state is null)return;
-   StatusText.Text="Checking saved license…";var result=await license.VerifyAsync(state.Key);
-   if(result.Valid){OpenApp(result);return;}store.Clear();StatusText.Text=result.Reason=="EXPIRED"?"License expired. Enter a new key.":"Saved license is no longer valid. Enter a new key.";
-  }catch(Exception ex){AppLogger.Error(ex.ToString());StatusText.Text="License state could not be restored. Enter your key again.";}
- }
- async void Activate_Click(object sender,RoutedEventArgs e){
-  var key=KeyBox.Text.Trim();if(key.Length<10){StatusText.Text="Enter a valid license key.";return;}
-  ActivateButton.IsEnabled=false;StatusText.Text="Verifying license…";
-  var result=await license.VerifyAsync(key);ActivateButton.IsEnabled=true;
-  if(!result.Valid){StatusText.Text=result.Reason=="EXPIRED"?"This key has expired. Please enter a new key.":"License rejected: "+result.Reason;return;}
-  await store.SaveAsync(new LicenseInfo(key,LicenseService.GetDeviceId(),result.ExpiresAt,result.Product));AppLogger.Info("License activated.");OpenApp(result);
- }
- void OpenApp(LicenseResult result){KeyBox.Visibility=Visibility.Collapsed;ActivateButton.Visibility=Visibility.Collapsed;TitleText.Text="NagiCore Dashboard";StatusText.Text=$"License active until {result.ExpiresAt?.ToLocalTime():dd MMM yyyy, HH:mm}.\n\nSelect a module to continue.";}
- void Dashboard_Click(object sender,RoutedEventArgs e){TitleText.Text="NagiCore Dashboard";StatusText.Text="Select a module to continue.";}
- void Module_Click(object sender,RoutedEventArgs e){if(KeyBox.Visibility==Visibility.Visible)return;var b=(System.Windows.Controls.Button)sender;TitleText.Text=b.Content?.ToString()??"Module";StatusText.Text="Module foundation is ready for implementation.";}
+public partial class MainWindow : Window
+{
+ readonly LicenseService license=new LicenseService();
+ readonly LocalLicenseStore store=new LocalLicenseStore();
+ readonly SettingsService settings=new SettingsService();
+ AppSettings currentSettings;
+ public MainWindow(){InitializeComponent();currentSettings=settings.Load();DarkModeBox.IsChecked=currentSettings.DarkMode;NotificationsBox.IsChecked=currentSettings.Notifications;UpdatesBox.IsChecked=currentSettings.CheckUpdates;Loaded+=async delegate{await RestoreLicenseAsync();ShowPage(DashboardPanel);};}
+ async Task RestoreLicenseAsync(){try{var state=await store.LoadAsync();if(state==null){LicenseDetails.Text="No active license. Enter a key to activate NagiCore.";return;}StatusText.Text="Checking saved license...";var result=await license.VerifyAsync(state.Key);if(result.Valid){LicenseDetails.Text="Active license until "+(result.ExpiresAt.HasValue?result.ExpiresAt.Value.ToLocalTime().ToString("dd MMM yyyy, HH:mm"):"unknown");StatusText.Text="License verified.";DashboardDetails.Text="License: Active\nApplication: Ready\nCompatibility: "+CompatibilityService.Check().Status;return;}store.Clear();LicenseDetails.Text="Saved license is no longer valid. Enter a new key.";StatusText.Text="License requires attention.";}catch(Exception ex){AppLogger.Error(ex.ToString());StatusText.Text="License state could not be restored.";}}
+ void ShowPage(System.Windows.Controls.UIElement page){DashboardPanel.Visibility=Visibility.Collapsed;SystemPanel.Visibility=Visibility.Collapsed;SettingsPanel.Visibility=Visibility.Collapsed;LogsPanel.Visibility=Visibility.Collapsed;LicensePanel.Visibility=Visibility.Collapsed;AboutPanel.Visibility=Visibility.Collapsed;page.Visibility=Visibility.Visible;}
+ void Dashboard_Click(object s,RoutedEventArgs e){TitleText.Text="Dashboard";StatusText.Text="Ready";var r=CompatibilityService.Check();DashboardDetails.Text="Application: NagiCore 1.0.0\nCompatibility: "+r.Status+"\nWindows: "+r.WindowsVersion+"\nArchitecture: "+(r.Is64Bit?"64-bit":"32-bit");ShowPage(DashboardPanel);}
+ void System_Click(object s,RoutedEventArgs e){TitleText.Text="System";StatusText.Text="Compatibility checks";var r=CompatibilityService.Check();var si=SystemInfoService.Get();SystemDetails.Text="Status: "+r.Status+"\nWindows: "+si.OperatingSystem+"\nArchitecture: "+si.Architecture+"\nCPU: "+si.Cpu+"\nRAM: "+si.Memory+"\nStorage: "+si.Storage+"\nRuntime: "+si.Runtime+"\nDetails: "+r.Details;ShowPage(SystemPanel);}
+ void Settings_Click(object s,RoutedEventArgs e){TitleText.Text="Settings";StatusText.Text="Persistent application settings";ShowPage(SettingsPanel);}
+ void Logs_Click(object s,RoutedEventArgs e){TitleText.Text="Logs";StatusText.Text="Diagnostics";RefreshLogs_Click(null,null);ShowPage(LogsPanel);}
+ void License_Click(object s,RoutedEventArgs e){TitleText.Text="License";StatusText.Text="License management";ShowPage(LicensePanel);}
+ void About_Click(object s,RoutedEventArgs e){TitleText.Text="About";StatusText.Text="NagiCore information";ShowPage(AboutPanel);}
+ async void Activate_Click(object s,RoutedEventArgs e){var key=(KeyBox.Text??"").Trim();if(key.Length<10){StatusText.Text="Enter a valid license key.";return;}ActivateButton.IsEnabled=false;StatusText.Text="Verifying license...";var result=await license.VerifyAsync(key);ActivateButton.IsEnabled=true;if(!result.Valid){StatusText.Text="License rejected: "+result.Reason;return;}await store.SaveAsync(new LicenseInfo(key,LicenseService.GetDeviceId(),result.ExpiresAt,result.Product));AppLogger.Info("License activated.");LicenseDetails.Text="Active license until "+(result.ExpiresAt.HasValue?result.ExpiresAt.Value.ToLocalTime().ToString("dd MMM yyyy, HH:mm"):"unknown");StatusText.Text="License activated successfully.";}
+ void SaveSettings_Click(object s,RoutedEventArgs e){currentSettings.DarkMode=DarkModeBox.IsChecked==true;currentSettings.Notifications=NotificationsBox.IsChecked==true;currentSettings.CheckUpdates=UpdatesBox.IsChecked==true;settings.Save(currentSettings);AppLogger.Info("Settings saved.");StatusText.Text="Settings saved.";}
+ void ResetSettings_Click(object s,RoutedEventArgs e){if(MessageBox.Show("Reset all NagiCore settings?","NagiCore",MessageBoxButton.YesNo,MessageBoxImage.Question)!=MessageBoxResult.Yes)return;settings.Reset();currentSettings=new AppSettings();DarkModeBox.IsChecked=true;NotificationsBox.IsChecked=false;UpdatesBox.IsChecked=true;StatusText.Text="Settings reset.";}
+ void ExportSettings_Click(object s,RoutedEventArgs e){var d=new SaveFileDialog{Filter="NagiCore settings|*.json",FileName="NagiCore-settings.json"};if(d.ShowDialog()!=true)return;try{settings.Save(currentSettings);settings.Export(d.FileName);StatusText.Text="Settings exported.";}catch(Exception ex){AppLogger.Error(ex.ToString());MessageBox.Show("Settings export failed.","NagiCore",MessageBoxButton.OK,MessageBoxImage.Error);}}
+ void ImportSettings_Click(object s,RoutedEventArgs e){var d=new OpenFileDialog{Filter="NagiCore settings|*.json"};if(d.ShowDialog()!=true)return;try{settings.Import(d.FileName);currentSettings=settings.Load();DarkModeBox.IsChecked=currentSettings.DarkMode;NotificationsBox.IsChecked=currentSettings.Notifications;UpdatesBox.IsChecked=currentSettings.CheckUpdates;StatusText.Text="Settings imported.";}catch(Exception ex){AppLogger.Error(ex.ToString());MessageBox.Show("The selected settings file is invalid.","NagiCore",MessageBoxButton.OK,MessageBoxImage.Error);}}
+ void RefreshLogs_Click(object s,RoutedEventArgs e){try{LogBox.Text=File.Exists(AppLogger.LogFile)?File.ReadAllText(AppLogger.LogFile):"No log entries yet.";}catch(Exception ex){LogBox.Text="Unable to read log.";AppLogger.Error(ex.ToString());}}
+ void ExportLog_Click(object s,RoutedEventArgs e){var d=new SaveFileDialog{Filter="Text file|*.txt",FileName="NagiCore-log.txt"};if(d.ShowDialog()!=true)return;try{File.Copy(AppLogger.LogFile,d.FileName,true);StatusText.Text="Log exported.";}catch(Exception ex){AppLogger.Error(ex.ToString());MessageBox.Show("Log export failed.","NagiCore",MessageBoxButton.OK,MessageBoxImage.Error);}}
 }
