@@ -32,7 +32,11 @@ $items.Add($item)
 $invoice = $billing.Create("Smoke Customer", "0000000000", "Test", $items, "Paid")
 if ($invoice.Total -ne 224.20) { throw "Billing calculation failed: $($invoice.Total)" }
 if (($billing.List($invoice.InvoiceNumber)).Count -lt 1) { throw "Billing persistence failed." }
+$invoice.CustomerName = "Updated Customer"
+$billing.Update($invoice)
+if (($billing.List($invoice.InvoiceNumber))[0].CustomerName -ne "Updated Customer") { throw "Billing update failed." }
 $billing.Delete($invoice.Id)
+if (($billing.List($invoice.InvoiceNumber)).Count -ne 0) { throw "Billing delete failed." }
 
 $diaType = $nagiAssembly.GetType("NagiCore.Modules.Diamond.DiamondModule")
 $recordType = $nagiAssembly.GetType("NagiCore.Modules.Diamond.DiamondRecord")
