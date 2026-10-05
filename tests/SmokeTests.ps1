@@ -27,7 +27,9 @@ $itemType = $nagiAssembly.GetType("NagiCore.Modules.Billing.InvoiceItem")
 $billing = $billType.GetConstructor([Type[]]@()).Invoke($null)
 $item = $itemType.GetConstructor([Type[]]@()).Invoke($null)
 $item.Description = "Smoke item"; $item.Quantity = 2; $item.UnitPrice = 100; $item.TaxPercent = 18; $item.Discount = 10
-$invoice = $billing.Create("Smoke Customer", "0000000000", "Test", @($item), "Paid")
+$items = New-Object "System.Collections.Generic.List[NagiCore.Modules.Billing.InvoiceItem]"
+$items.Add($item)
+$invoice = $billing.Create("Smoke Customer", "0000000000", "Test", $items, "Paid")
 if ($invoice.Total -ne 224.20) { throw "Billing calculation failed: $($invoice.Total)" }
 if (($billing.List($invoice.InvoiceNumber)).Count -lt 1) { throw "Billing persistence failed." }
 $billing.Delete($invoice.Id)
