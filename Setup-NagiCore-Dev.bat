@@ -421,10 +421,8 @@ if not exist "%COMPILER_ROOT%\Microsoft.Net.Compilers.Toolset.%COMPILER_VERSION%
 
 call :verify_nuget_package "%MSBUILD_ROOT%" "Microsoft.Build.Runtime.%MSBUILD_VERSION%.nupkg"
 if errorlevel 1 exit /b 1
-if errorlevel 1 exit /b 1
 
 call :verify_nuget_package "%COMPILER_ROOT%" "Microsoft.Net.Compilers.Toolset.%COMPILER_VERSION%.nupkg"
-if errorlevel 1 exit /b 1
 if errorlevel 1 exit /b 1
 
 call :find_msbuild
@@ -457,7 +455,6 @@ exit /b 0
 >>"%NUGET_CONFIG%" echo       ^<certificate fingerprint="0E5F38F57DC1BCC806D8494F4F90FBCEDD988B46760709CBEEC6F4219AA6157D" hashAlgorithm="SHA256" allowUntrustedRoot="false" /^>
 >>"%NUGET_CONFIG%" echo       ^<certificate fingerprint="5A2901D6ADA3D18260B9C6DFE2133C95D74B9EEF6AE0E5DC334C8454D1477DF4" hashAlgorithm="SHA256" allowUntrustedRoot="false" /^>
 >>"%NUGET_CONFIG%" echo       ^<certificate fingerprint="1F4B311D9ACC115C8DC8018B5A49E00FCE6DA8E2855F9F014CA6F34570BC482D" hashAlgorithm="SHA256" allowUntrustedRoot="false" /^>
->>"%NUGET_CONFIG%" echo       ^<owners>microsoft;nuget</owners^>
 >>"%NUGET_CONFIG%" echo     ^</repository^>
 >>"%NUGET_CONFIG%" echo   ^</trustedSigners^>
 >>"%NUGET_CONFIG%" echo ^</configuration^>
