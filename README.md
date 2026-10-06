@@ -18,10 +18,21 @@ C# / WPF / .NET Framework 4.8.
 Actual feature availability is checked at runtime.
 
 ## Build
-On Windows with Visual Studio/MSBuild:
-```powershell
-msbuild NagiCore.csproj /restore /p:Configuration=Release /m
-```
+
+### Professional one-click developer setup
+
+Run **Setup-NagiCore-Dev.bat** from the repository root as Administrator.
+
+The bootstrap:
+- detects the Windows build environment
+- requires the .NET Framework 4.8 targeting pack
+- rejects legacy MSBuild 4.x
+- prepares a compatible MSBuild and C# compiler toolchain without Visual Studio Installer
+- restores PackageReference dependencies from nuget.org
+- builds Release
+- runs the real smoke tests
+- builds the Inno Setup installer when ISCC is available
+- writes detailed logs under `.tools\\logs`
 
 Build output: `bin\\Release\\NagiCore.exe`
 
