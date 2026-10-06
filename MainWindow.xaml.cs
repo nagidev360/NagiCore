@@ -53,7 +53,7 @@ public partial class MainWindow : Window
    if(state==null){LicenseDetails.Text="No active license. Enter a key to activate NagiCore.";return;}
    StatusText.Text="Checking saved license...";
    var result=await license.VerifyAsync(state.Key);
-   if(result.Valid){LicenseDetails.Text="Active license until "+(result.ExpiresAt.HasValue?result.ExpiresAt.Value.ToLocalTime().ToString("dd MMM yyyy, HH:mm"):"unknown");StatusText.Text="License verified.";return;}
+   if(result.Valid && string.Equals(result.Product,"NagiCore",StringComparison.OrdinalIgnoreCase)){LicenseDetails.Text="Active license until "+(result.ExpiresAt.HasValue?result.ExpiresAt.Value.ToLocalTime().ToString("dd MMM yyyy, HH:mm"):"unknown");StatusText.Text="License verified.";return;}
    store.Clear();LicenseDetails.Text="Saved license is no longer valid. Enter a new key.";StatusText.Text="License requires attention.";
   }catch(Exception ex){AppLogger.Error(ex.ToString());StatusText.Text="License state could not be restored.";}
  }
