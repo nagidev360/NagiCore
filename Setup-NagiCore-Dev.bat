@@ -25,13 +25,11 @@ set "ISCC_EXE="
 call :find_msbuild
 call :find_iscc
 
-if defined MSBUILD_EXE if defined ISCC_EXE goto :tools_ready
-
 echo [1/4] Checking required build tools...
 echo.
 
 if not defined MSBUILD_EXE (
-    echo MSBuild was not found. Installing Visual Studio Build Tools...
+    echo MSBuild was not found. Installing a compatible Visual Studio Build Tools version...
     call :install_vs_buildtools
     if errorlevel 1 goto :failed
     call :find_msbuild
@@ -41,26 +39,12 @@ if not defined MSBUILD_EXE (
     goto :failed
 )
 
-if not defined ISCC_EXE (
-    echo Inno Setup compiler was not found. Installing Inno Setup...
-    call :install_innosetup
-    if errorlevel 1 goto :failed
-    call :find_iscc
-)
-if not defined ISCC_EXE (
-    echo ERROR: ISCC.exe is still not available after installation.
-    goto :failed
-)
-
-:tools_ready
 echo.
 echo [2/4] Configuring machine PATH...
 for %%P in ("%MSBUILD_EXE%") do call :add_to_path "%%~dpP"
-for %%P in ("%ISCC_EXE%") do call :add_to_path "%%~dpP"
 
 echo.
 echo MSBuild: %MSBUILD_EXE%
-echo ISCC:    %ISCC_EXE%
 
 echo.
 echo [3/4] Restoring and building NagiCore...
@@ -80,19 +64,32 @@ if errorlevel 1 (
 
 echo.
 echo [4/4] Building NagiCore installer...
-if not exist "installer\NagiCoreInstaller.iss" (
-    echo ERROR: installer\NagiCoreInstaller.iss was not found.
-    goto :failed
+call :find_iscc
+if not defined ISCC_EXE (
+    echo Inno Setup compiler was not found. Trying to install it...
+    call :install_innosetup
+    call :find_iscc
 )
-if not exist "dist" mkdir "dist"
 
-"%ISCC_EXE%" "installer\NagiCoreInstaller.iss"
-if errorlevel 1 (
-    echo ERROR: Inno Setup compilation failed.
-    goto :failed
+if defined ISCC_EXE (
+    call :add_to_path "%~dp0"
+    for %%P in ("%ISCC_EXE%") do call :add_to_path "%%~dpP"
+    if not exist "installer\NagiCoreInstaller.iss" (
+        echo WARNING: installer\NagiCoreInstaller.iss was not found.
+    ) else (
+        if not exist "dist" mkdir "dist"
+        "%ISCC_EXE%" "installer\NagiCoreInstaller.iss"
+        if errorlevel 1 (
+            echo WARNING: Inno Setup compilation failed. The application EXE is still available.
+        )
+    )
+) else (
+    echo WARNING: Inno Setup is unavailable on this Windows installation.
+    echo The application EXE was built successfully; installer creation was skipped.
 )
-if not exist "dist\NagiCore-Setup.exe" (
-    echo ERROR: Installer output was not found.
+
+if not exist "bin\Release\NagiCore.exe" (
+    echo ERROR: NagiCore.exe was not produced.
     goto :failed
 )
 
@@ -102,9 +99,10 @@ echo                    BUILD SUCCESSFUL
 echo ============================================================
 echo.
 echo Application: %CD%\bin\Release\NagiCore.exe
-echo Installer:   %CD%\dist\NagiCore-Setup.exe
+if exist "dist\NagiCore-Setup.exe" echo Installer:   %CD%\dist\NagiCore-Setup.exe
 echo.
-echo You can now double-click NagiCore-Setup.exe to install.
+echo Double-click NagiCore.exe to run the application.
+if exist "dist\NagiCore-Setup.exe" echo Or double-click NagiCore-Setup.exe to install it.
 echo.
 pause
 exit /b 0
@@ -137,20 +135,43 @@ for /f "delims=" %%P in ('where iscc.exe 2^>nul') do if not defined ISCC_EXE set
 exit /b 0
 
 :install_vs_buildtools
+rem Visual Studio 2022 does not run on Windows 7/8/8.1.
+rem Use Visual Studio 2019 Build Tools on those older systems.
+set "VS_MAJOR=17"
+set "VS_URL=https://aka.ms/vs/17/release/vs_buildtools.exe"
+set "VS_INSTALL_ID=Microsoft.VisualStudio.2022.BuildTools"
+
+set "OS_NAME="
+for /f "tokens=2,*" %%A in ('reg query "HKLM\SOFTWARE\Microsoft\Windows NT\CurrentVersion" /v ProductName 2^>nul') do if /i "%%A"=="ProductName" set "OS_NAME=%%B"
+
+echo Detected OS: %OS_NAME%
+echo.
+
+echo %OS_NAME% | findstr /I /C:"Windows 7" /C:"Windows 8.1" /C:"Windows 8" >nul
+if not errorlevel 1 (
+    set "VS_MAJOR=16"
+    set "VS_URL=https://aka.ms/vs/16/release/vs_buildtools.exe"
+    set "VS_INSTALL_ID=Microsoft.VisualStudio.2019.BuildTools"
+    echo Older Windows detected. Using Visual Studio 2019 Build Tools.
+) else (
+    echo Modern Windows detected. Using Visual Studio 2022 Build Tools.
+)
+
 set "WINGET="
 for /f "delims=" %%P in ('where winget.exe 2^>nul') do if not defined WINGET set "WINGET=%%P"
-if defined WINGET (
+if defined WINGET if "%VS_MAJOR%"=="17" (
     echo Installing Microsoft Visual Studio Build Tools through winget...
-    "%WINGET%" install --id Microsoft.VisualStudio.2022.BuildTools -e --accept-source-agreements --accept-package-agreements --override "--quiet --wait --norestart --add Microsoft.VisualStudio.Workload.ManagedDesktopBuildTools --add Microsoft.Net.Component.4.8.TargetingPack --includeRecommended"
+    "%WINGET%" install --id %VS_INSTALL_ID% -e --accept-source-agreements --accept-package-agreements --override "--quiet --wait --norestart --add Microsoft.VisualStudio.Workload.ManagedDesktopBuildTools --add Microsoft.Net.Component.4.8.TargetingPack --includeRecommended"
     if not errorlevel 1 exit /b 0
-    echo winget installation failed. Trying download fallback...
+    echo winget installation failed. Trying official Microsoft bootstrapper...
 )
 
 set "VS_BOOTSTRAPPER=%TEMP%\vs_buildtools.exe"
-call :download_file "https://aka.ms/vs/17/release/vs_buildtools.exe" "%VS_BOOTSTRAPPER%"
+call :download_file "%VS_URL%" "%VS_BOOTSTRAPPER%"
 if errorlevel 1 (
     echo ERROR: Could not download Visual Studio Build Tools.
-    echo Install Microsoft Visual Studio Build Tools manually, then run this script again.
+    echo Install Visual Studio 2019 Build Tools manually on Windows 7/8.1,
+    echo or Visual Studio 2022 Build Tools on Windows 10/11, then run this script again.
     exit /b 1
 )
 "%VS_BOOTSTRAPPER%" --quiet --wait --norestart --add Microsoft.VisualStudio.Workload.ManagedDesktopBuildTools --add Microsoft.Net.Component.4.8.TargetingPack --includeRecommended
