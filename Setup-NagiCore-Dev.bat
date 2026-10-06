@@ -28,14 +28,13 @@ call :find_iscc
 echo [1/4] Checking required build tools...
 echo.
 
-if defined MSBUILD_EXE (
-    call :get_msbuild_major
-    if defined MSBUILD_MAJOR if %MSBUILD_MAJOR% LSS 15 (
-        echo Legacy MSBuild %MSBUILD_MAJOR%.x detected. It is not compatible with NagiCore.
-        set "MSBUILD_EXE="
-        set "MSBUILD_MAJOR="
-    )
+call :ensure_supported_msbuild
+if errorlevel 1 (
+    echo Legacy or unavailable MSBuild detected.
+    set "MSBUILD_EXE="
+    set "MSBUILD_MAJOR="
 )
+
 if not defined MSBUILD_EXE (
     echo MSBuild 15+ was not found.
     echo Bootstrapping portable MSBuild without Visual Studio Installer...
@@ -48,12 +47,11 @@ if not defined MSBUILD_EXE (
     goto :failed
 )
 call :get_msbuild_major
-if not defined MSBUILD_MAJOR if errorlevel 1 goto :failed
+if errorlevel 1 goto :failed
 if %MSBUILD_MAJOR% LSS 15 (
     echo ERROR: Bootstrap produced an unsupported MSBuild version: %MSBUILD_MAJOR%.
     goto :failed
 )
-
 echo.
 echo [2/4] Configuring machine PATH...
 for %%P in ("%MSBUILD_EXE%") do call :add_to_path "%%~dpP"
@@ -144,6 +142,14 @@ for %%P in (
     "%ProgramFiles(x86)%\Microsoft Visual Studio\2019\BuildTools\MSBuild\Current\Bin\MSBuild.exe"
 ) do if not defined MSBUILD_EXE if exist "%%~P" set "MSBUILD_EXE=%%~P"
 exit /b 0
+:ensure_supported_msbuild
+if not defined MSBUILD_EXE exit /b 1
+call :get_msbuild_major
+if errorlevel 1 exit /b 1
+if %MSBUILD_MAJOR% LSS 15 exit /b 1
+exit /b 0
+
+
 :get_msbuild_major
 set "MSBUILD_MAJOR="
 for /f "tokens=1 delims=." %%V in ('"%MSBUILD_EXE%" -version 2^>nul ^| findstr /R "^[0-9]"') do if not defined MSBUILD_MAJOR set "MSBUILD_MAJOR=%%V"
