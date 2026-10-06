@@ -28,15 +28,29 @@ call :find_iscc
 echo [1/4] Checking required build tools...
 echo.
 
+if defined MSBUILD_EXE (
+    call :get_msbuild_major
+    if defined MSBUILD_MAJOR if %MSBUILD_MAJOR% LSS 15 (
+        echo Legacy MSBuild %MSBUILD_MAJOR%.x detected. It is not compatible with NagiCore.
+        set "MSBUILD_EXE="
+        set "MSBUILD_MAJOR="
+    )
+)
 if not defined MSBUILD_EXE (
-    echo MSBuild was not found.
+    echo MSBuild 15+ was not found.
     echo Bootstrapping portable MSBuild without Visual Studio Installer...
     call :install_vs_buildtools
     if errorlevel 1 goto :failed
     call :find_msbuild
 )
 if not defined MSBUILD_EXE (
-    echo ERROR: MSBuild is still not available after installation.
+    echo ERROR: Compatible MSBuild is still not available after bootstrap.
+    goto :failed
+)
+call :get_msbuild_major
+if not defined MSBUILD_MAJOR if errorlevel 1 goto :failed
+if %MSBUILD_MAJOR% LSS 15 (
+    echo ERROR: Bootstrap produced an unsupported MSBuild version: %MSBUILD_MAJOR%.
     goto :failed
 )
 
@@ -57,7 +71,15 @@ if not exist "NagiCore.csproj" (
 if exist "bin\Release" rmdir /s /q "bin\Release" >nul 2>&1
 if exist "obj\Release" rmdir /s /q "obj\Release" >nul 2>&1
 
-"%MSBUILD_EXE%" "NagiCore.csproj" /restore /p:Configuration=Release /m
+call :get_msbuild_major
+if defined MSBUILD_MAJOR if %MSBUILD_MAJOR% GEQ 15 (
+    "%MSBUILD_EXE%" "NagiCore.csproj" /restore /p:Configuration=Release /m
+) else (
+    echo ERROR: The detected MSBuild is too old for this project.
+    echo NagiCore requires MSBuild 15 or newer because it uses PackageReference.
+    echo MSBuild 4.x cannot process /restore or the current project dependencies.
+    goto :failed
+)
 if errorlevel 1 (
     echo ERROR: NagiCore build failed.
     goto :failed
@@ -120,10 +142,19 @@ for %%P in (
     "%ProgramFiles%\Microsoft Visual Studio\2026\BuildTools\MSBuild\Current\Bin\MSBuild.exe"
     "%ProgramFiles(x86)%\Microsoft Visual Studio\2022\BuildTools\MSBuild\Current\Bin\MSBuild.exe"
     "%ProgramFiles(x86)%\Microsoft Visual Studio\2019\BuildTools\MSBuild\Current\Bin\MSBuild.exe"
-    "%WINDIR%\Microsoft.NET\Framework\v4.0.30319\MSBuild.exe"
-    "%WINDIR%\Microsoft.NET\Framework64\v4.0.30319\MSBuild.exe"
 ) do if not defined MSBUILD_EXE if exist "%%~P" set "MSBUILD_EXE=%%~P"
 exit /b 0
+:get_msbuild_major
+set "MSBUILD_MAJOR="
+for /f "tokens=1 delims=." %%V in ('"%MSBUILD_EXE%" -version 2^>nul ^| findstr /R "^[0-9]"') do if not defined MSBUILD_MAJOR set "MSBUILD_MAJOR=%%V"
+if not defined MSBUILD_MAJOR (
+    echo ERROR: Unable to determine MSBuild version.
+    exit /b 1
+)
+echo MSBuild major version: %MSBUILD_MAJOR%
+exit /b 0
+
+
 :find_iscc
 set "ISCC_EXE="
 for %%P in (
