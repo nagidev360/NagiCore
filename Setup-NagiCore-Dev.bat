@@ -383,6 +383,9 @@ set "NUGET_SOURCE=https://api.nuget.org/v3/index.json"
 if not exist "%MSBUILD_ROOT%" mkdir "%MSBUILD_ROOT%" >nul 2>&1
 if not exist "%COMPILER_ROOT%" mkdir "%COMPILER_ROOT%" >nul 2>&1
 
+call :write_nuget_config
+if errorlevel 1 exit /b 1
+
 if not exist "%NUGET_EXE%" (
     call :info "Downloading NuGet CLI 5.11.6..."
     call :download "%NUGET_URL%" "%NUGET_EXE%"
@@ -400,7 +403,7 @@ call :info "NuGet CLI integrity verified."
 
 if not exist "%MSBUILD_ROOT%\Microsoft.Build.Runtime.%MSBUILD_VERSION%\MSBuild.exe" (
     call :info "Installing Microsoft.Build.Runtime %MSBUILD_VERSION%..."
-    "%NUGET_EXE%" install "%MSBUILD_PACKAGE%" -Version "%MSBUILD_VERSION%" -OutputDirectory "%MSBUILD_ROOT%" -Source "%NUGET_SOURCE%" -NonInteractive -DirectDownload -NoHttpCache -ForceEnglishOutput
+    "%NUGET_EXE%" install "%MSBUILD_PACKAGE%" -Version "%MSBUILD_VERSION%" -OutputDirectory "%MSBUILD_ROOT%" -Source "%NUGET_SOURCE%" -ConfigFile "%NUGET_CONFIG%" -NonInteractive -DirectDownload -NoHttpCache -ForceEnglishOutput
     if errorlevel 1 (
         call :error "Microsoft.Build.Runtime installation failed."
         exit /b 1
@@ -409,7 +412,7 @@ if not exist "%MSBUILD_ROOT%\Microsoft.Build.Runtime.%MSBUILD_VERSION%\MSBuild.e
 
 if not exist "%COMPILER_ROOT%\Microsoft.Net.Compilers.Toolset.%COMPILER_VERSION%" (
     call :info "Installing Microsoft.Net.Compilers.Toolset %COMPILER_VERSION%..."
-    "%NUGET_EXE%" install "%COMPILER_PACKAGE%" -Version "%COMPILER_VERSION%" -OutputDirectory "%COMPILER_ROOT%" -Source "%NUGET_SOURCE%" -NonInteractive -DirectDownload -NoHttpCache -ForceEnglishOutput
+    "%NUGET_EXE%" install "%COMPILER_PACKAGE%" -Version "%COMPILER_VERSION%" -OutputDirectory "%COMPILER_ROOT%" -Source "%NUGET_SOURCE%" -ConfigFile "%NUGET_CONFIG%" -NonInteractive -DirectDownload -NoHttpCache -ForceEnglishOutput
     if errorlevel 1 (
         call :error "Microsoft.Net.Compilers.Toolset installation failed."
         exit /b 1
@@ -418,8 +421,10 @@ if not exist "%COMPILER_ROOT%\Microsoft.Net.Compilers.Toolset.%COMPILER_VERSION%
 
 call :verify_nuget_package "%MSBUILD_ROOT%" "Microsoft.Build.Runtime.%MSBUILD_VERSION%.nupkg"
 if errorlevel 1 exit /b 1
+if errorlevel 1 exit /b 1
 
 call :verify_nuget_package "%COMPILER_ROOT%" "Microsoft.Net.Compilers.Toolset.%COMPILER_VERSION%.nupkg"
+if errorlevel 1 exit /b 1
 if errorlevel 1 exit /b 1
 
 call :find_msbuild
@@ -437,6 +442,31 @@ if not defined CSC_EXE (
 
 exit /b 0
 
+:write_nuget_config
+> "%NUGET_CONFIG%" echo ^<?xml version="1.0" encoding="utf-8"?^>
+>>"%NUGET_CONFIG%" echo ^<configuration^>
+>>"%NUGET_CONFIG%" echo   ^<config^>
+>>"%NUGET_CONFIG%" echo     ^<add key="signatureValidationMode" value="require" /^>
+>>"%NUGET_CONFIG%" echo   ^</config^>
+>>"%NUGET_CONFIG%" echo   ^<packageSources^>
+>>"%NUGET_CONFIG%" echo     ^<clear /^>
+>>"%NUGET_CONFIG%" echo     ^<add key="nuget.org" value="https://api.nuget.org/v3/index.json" protocolVersion="3" /^>
+>>"%NUGET_CONFIG%" echo   ^</packageSources^>
+>>"%NUGET_CONFIG%" echo   ^<trustedSigners^>
+>>"%NUGET_CONFIG%" echo     ^<repository name="nuget.org" serviceIndex="https://api.nuget.org/v3/index.json"^>
+>>"%NUGET_CONFIG%" echo       ^<certificate fingerprint="0E5F38F57DC1BCC806D8494F4F90FBCEDD988B46760709CBEEC6F4219AA6157D" hashAlgorithm="SHA256" allowUntrustedRoot="false" /^>
+>>"%NUGET_CONFIG%" echo       ^<certificate fingerprint="5A2901D6ADA3D18260B9C6DFE2133C95D74B9EEF6AE0E5DC334C8454D1477DF4" hashAlgorithm="SHA256" allowUntrustedRoot="false" /^>
+>>"%NUGET_CONFIG%" echo       ^<certificate fingerprint="1F4B311D9ACC115C8DC8018B5A49E00FCE6DA8E2855F9F014CA6F34570BC482D" hashAlgorithm="SHA256" allowUntrustedRoot="false" /^>
+>>"%NUGET_CONFIG%" echo       ^<owners>microsoft;nuget</owners^>
+>>"%NUGET_CONFIG%" echo     ^</repository^>
+>>"%NUGET_CONFIG%" echo   ^</trustedSigners^>
+>>"%NUGET_CONFIG%" echo ^</configuration^>
+if not exist "%NUGET_CONFIG%" (
+    call :error "Failed to create the private NuGet trust configuration."
+    exit /b 1
+)
+exit /b 0
+
 :verify_nuget_package
 set "PKG_ROOT=%~1"
 set "PKG_NAME=%~2"
@@ -444,9 +474,12 @@ set "PKG_FILE="
 for /f "delims=" %%P in ('dir /b /s "%PKG_ROOT%\%PKG_NAME%" 2^>nul') do if not defined PKG_FILE set "PKG_FILE=%%P"
 
 if not defined PKG_FILE (
-    call :warn "NuGet did not leave a local package archive for signature verification: %PKG_NAME%"
-    call :warn "The package was obtained directly from nuget.org through NuGet."
-    exit /b 0
+    set "GLOBAL_NUGET=%USERPROFILE%\\.nuget\\packages"
+    for /f "delims=" %%P in ('dir /b /s "!GLOBAL_NUGET!\\%PKG_NAME%" 2^>nul') do if not defined PKG_FILE set "PKG_FILE=%%P"
+)
+if not defined PKG_FILE (
+    call :error "NuGet package archive for signature verification was not found: %PKG_NAME%"
+    exit /b 1
 )
 
 "%NUGET_EXE%" verify -All "!PKG_FILE!" -NonInteractive -ForceEnglishOutput
@@ -465,7 +498,7 @@ del /q "%RESTORE_LOG%" >nul 2>&1
 call :info "Restoring PackageReference dependencies from nuget.org."
 call :info "No arbitrary package source is used."
 
-"!MSBUILD_EXE!" "%PROJECT_FILE%" -t:Restore -p:Configuration=%CONFIGURATION% -p:RestoreSources=%NUGET_SOURCE% -p:RestoreIgnoreFailedSources=false -v:minimal >"%RESTORE_LOG%" 2>&1
+"!MSBUILD_EXE!" "%PROJECT_FILE%" -t:Restore -p:Configuration=%CONFIGURATION% -p:RestoreSources=%NUGET_SOURCE% -p:RestoreConfigFile="%NUGET_CONFIG%" -p:RestoreIgnoreFailedSources=false -p:RestoreNoHttpCache=true -v:minimal >"%RESTORE_LOG%" 2>&1
 set "RC=!errorlevel!"
 
 type "%RESTORE_LOG%"
