@@ -142,7 +142,11 @@ set "VS_URL=https://aka.ms/vs/17/release/vs_buildtools.exe"
 set "VS_INSTALL_ID=Microsoft.VisualStudio.2022.BuildTools"
 
 set "OS_NAME="
-for /f "tokens=2,*" %%A in ('reg query "HKLM\SOFTWARE\Microsoft\Windows NT\CurrentVersion" /v ProductName 2^>nul') do if /i "%%A"=="ProductName" set "OS_NAME=%%B"
+for /f "tokens=2 delims==" %%A in ('wmic os get Caption /value 2^>nul ^| find "="') do if not defined OS_NAME set "OS_NAME=%%A"
+if not defined OS_NAME (
+    for /f "tokens=2,*" %%A in ('reg query "HKLM\SOFTWARE\Microsoft\Windows NT\CurrentVersion" /v ProductName 2^>nul') do if /i "%%A"=="ProductName" set "OS_NAME=%%B"
+)
+if not defined OS_NAME set "OS_NAME=Unknown Windows"
 
 echo Detected OS: %OS_NAME%
 echo.
@@ -242,16 +246,27 @@ if not errorlevel 1 (
 rem 4) Last resort: open the official URL in the browser for manual download.
 echo.
 echo Automatic HTTPS download failed on this Windows installation.
-echo Opening the official download URL in your browser...
+echo Opening the official Microsoft download page in your browser...
 start "" "%DOWNLOAD_URL%"
 echo.
-echo Save the downloaded file as:
-echo   %DOWNLOAD_FILE%
-echo Then press any key to continue.
-pause >nul
+echo IMPORTANT:
+echo 1. Download the installer from the official page.
+echo 2. Save it EXACTLY as:
+echo    %DOWNLOAD_FILE%
+echo 3. If the Save dialog does not show that folder, open:
+echo    %TEMP%
+echo.
+echo Waiting for the downloaded file...
+:wait_for_download
+if exist "%DOWNLOAD_FILE%" (
+    call :validate_download
+    if not errorlevel 1 exit /b 0
+)
+choice /C YN /N /M "Is the file saved at the path above? [Y/N]: "
+if errorlevel 2 goto :wait_for_download
 if exist "%DOWNLOAD_FILE%" call :validate_download && exit /b 0
 
-echo ERROR: Download could not be completed automatically.
+echo ERROR: Downloaded installer was not found or is incomplete.
 exit /b 1
 
 :validate_download
