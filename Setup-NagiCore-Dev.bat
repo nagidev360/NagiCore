@@ -31,43 +31,104 @@ echo.
 if not defined MSBUILD_EXE (
     echo MSBuild was not found. Installing a compatible Visual Studio Build Tools version...
     call :install_vs_buildtools
-    if errorlevel 1 goto :failed
-    call :find_msbuild
+rem Portable build-tool bootstrap: no Visual Studio Installer is used.
+rem MSBuild Runtime is distributed by Microsoft as a complete executable MSBuild copy.
+set "TOOLS_ROOT=%CD%\.tools"
+set "MSBUILD_ROOT=%TOOLS_ROOT%\msbuild-runtime"
+set "NUGET_EXE=%TOOLS_ROOT%\nuget.exe"
+set "NUGET_URL=https://dist.nuget.org/win-x86-commandline/v5.11.6/nuget.exe"
+set "NUGET_SHA256=63BA74E6B37A6591520E2CC396099D9913AE4C309FF0D8D953611C63377A514"
+
+if not exist "%TOOLS_ROOT%" mkdir "%TOOLS_ROOT%"
+if not exist "%MSBUILD_ROOT%" mkdir "%MSBUILD_ROOT%"
+
+call :find_net48_refs
+if not defined NET48_REFS (
+    echo .NET Framework 4.8 Developer Pack / targeting pack was not found.
+    echo Installing it directly from Microsoft - Visual Studio Installer is not used.
+    call :install_net48_devpack
+    if errorlevel 1 exit /b 1
+    call :find_net48_refs
 )
-if not defined MSBUILD_EXE (
-    echo ERROR: MSBuild is still not available after installation.
-    goto :failed
+if not defined NET48_REFS (
+    echo ERROR: .NET Framework 4.8 targeting pack is still unavailable.
+    echo NagiCore targets .NET Framework 4.8 and cannot be built without its reference assemblies.
+    exit /b 1
 )
 
-echo.
-echo [2/4] Configuring machine PATH...
-for %%P in ("%MSBUILD_EXE%") do call :add_to_path "%%~dpP"
-
-echo.
-echo MSBuild: %MSBUILD_EXE%
-
-echo.
-echo [3/4] Restoring and building NagiCore...
-if not exist "NagiCore.csproj" (
-    echo ERROR: NagiCore.csproj was not found.
-    echo Run this script from the NagiCore repository folder.
-    goto :failed
+if not exist "%NUGET_EXE%" (
+    echo Downloading NuGet CLI 5.11.6...
+    call :download_file "%NUGET_URL%" "%NUGET_EXE%"
+    if errorlevel 1 exit /b 1
 )
-if exist "bin\Release" rmdir /s /q "bin\Release" >nul 2>&1
-if exist "obj\Release" rmdir /s /q "obj\Release" >nul 2>&1
-
-"%MSBUILD_EXE%" "NagiCore.csproj" /restore /p:Configuration=Release /m
+call :verify_sha256 "%NUGET_EXE%" "%NUGET_SHA256%"
 if errorlevel 1 (
-    echo ERROR: NagiCore build failed.
-    goto :failed
+    echo ERROR: NuGet CLI SHA-256 verification failed.
+    del /q "%NUGET_EXE%" >nul 2>&1
+    exit /b 1
 )
 
-echo.
-echo [4/4] Building NagiCore installer...
-call :find_iscc
-if not defined ISCC_EXE (
-    echo Inno Setup compiler was not found. Trying to install it...
-    call :install_innosetup
+echo Downloading portable MSBuild Runtime 16.11.6...
+"%NUGET_EXE%" install Microsoft.Build.Runtime -Version 16.11.6 -OutputDirectory "%MSBUILD_ROOT%" -Source "https://api.nuget.org/v3/index.json" -NonInteractive -DirectDownload -NoHttpCache -ForceEnglishOutput
+if errorlevel 1 (
+    echo ERROR: Portable MSBuild Runtime download failed.
+    exit /b 1
+)
+
+call :find_msbuild
+if not defined MSBUILD_EXE (
+    echo ERROR: Portable MSBuild.exe was not found after NuGet installation.
+    exit /b 1
+)
+echo Portable MSBuild: %MSBUILD_EXE%
+exit /b 0
+
+:find_net48_refs
+set "NET48_REFS="
+for %%P in (
+    "%ProgramFiles(x86)%\Reference Assemblies\Microsoft\Framework\.NETFramework\v4.8\RedistList\FrameworkList.xml"
+    "%ProgramFiles%\Reference Assemblies\Microsoft\Framework\.NETFramework\v4.8\RedistList\FrameworkList.xml"
+) do if not defined NET48_REFS if exist "%%~P" set "NET48_REFS=%%~dpP"
+exit /b 0
+
+:install_net48_devpack
+set "DEVPACK=%TEMP%\NDP48-DevPack-ENU.exe"
+set "DEVPACK_URL=https://download.microsoft.com/download/6/4/2/642ec242-448b-49a1-8371-5d9c202eaa46/NDP48-DevPack-ENU.exe"
+
+call :download_file "%DEVPACK_URL%" "%DEVPACK%"
+if errorlevel 1 (
+    echo ERROR: Could not download the official .NET Framework 4.8 Developer Pack.
+    echo You can download it manually from:
+    echo https://dotnet.microsoft.com/download/dotnet-framework/net48
+    exit /b 1
+)
+
+powershell.exe -NoProfile -ExecutionPolicy Bypass -Command "$s=Get-AuthenticodeSignature -LiteralPath '%DEVPACK%'; if($s.Status -ne 'Valid' -or $s.SignerCertificate.Subject -notmatch 'Microsoft') { exit 1 }"
+if errorlevel 1 (
+    echo ERROR: .NET Framework Developer Pack signature verification failed.
+    del /q "%DEVPACK%" >nul 2>&1
+    exit /b 1
+)
+
+echo Installing .NET Framework 4.8 Developer Pack...
+"%DEVPACK%" /quiet /norestart
+set "RC=%errorlevel%"
+del /q "%DEVPACK%" >nul 2>&1
+if not "%RC%"=="0" if not "%RC%"=="3010" (
+    echo ERROR: .NET Framework 4.8 Developer Pack installation failed with code %RC%.
+    exit /b 1
+)
+exit /b 0
+
+:verify_sha256
+set "HASH_FILE=%~1"
+set "EXPECTED_HASH=%~2"
+set "ACTUAL_HASH="
+for /f "tokens=1" %%H in ('certutil -hashfile "%HASH_FILE%" SHA256 2^>nul ^| findstr /R /I "^[0-9A-F][0-9A-F]"') do if not defined ACTUAL_HASH set "ACTUAL_HASH=%%H"
+if /I "%ACTUAL_HASH%"=="%EXPECTED_HASH%" exit /b 0
+exit /b 1
+
+:install_innosetup
     call :find_iscc
 )
 
@@ -109,17 +170,19 @@ exit /b 0
 
 :find_msbuild
 set "MSBUILD_EXE="
+rem Prefer the repo-local portable MSBuild runtime so this script does not require Visual Studio or Visual Studio Installer.
+for /f "delims=" %%P in ('dir /b /s ".tools\msbuild-runtime\MSBuild.exe" 2^>nul') do if not defined MSBUILD_EXE set "MSBUILD_EXE=%%P"
+if defined MSBUILD_EXE exit /b 0
+
+rem Use an already-installed MSBuild if one exists.
 for %%P in (
     "%ProgramFiles%\Microsoft Visual Studio\2022\BuildTools\MSBuild\Current\Bin\MSBuild.exe"
     "%ProgramFiles%\Microsoft Visual Studio\2026\BuildTools\MSBuild\Current\Bin\MSBuild.exe"
     "%ProgramFiles(x86)%\Microsoft Visual Studio\2022\BuildTools\MSBuild\Current\Bin\MSBuild.exe"
     "%ProgramFiles(x86)%\Microsoft Visual Studio\2019\BuildTools\MSBuild\Current\Bin\MSBuild.exe"
+    "%WINDIR%\Microsoft.NET\Framework\v4.0.30319\MSBuild.exe"
+    "%WINDIR%\Microsoft.NET\Framework64\v4.0.30319\MSBuild.exe"
 ) do if not defined MSBUILD_EXE if exist "%%~P" set "MSBUILD_EXE=%%~P"
-if defined MSBUILD_EXE exit /b 0
-set "VSWHERE=%ProgramFiles(x86)%\Microsoft Visual Studio\Installer\vswhere.exe"
-if exist "%VSWHERE%" (
-    for /f "usebackq delims=" %%P in (`"%VSWHERE%" -latest -products * -requires Microsoft.Component.MSBuild -find MSBuild\**\Bin\MSBuild.exe 2^>nul`) do if not defined MSBUILD_EXE set "MSBUILD_EXE=%%P"
-)
 exit /b 0
 
 :find_iscc
